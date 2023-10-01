@@ -140,7 +140,7 @@ in vec3 frag_color;
 
 void main()
 {
-	gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0); // color
+	gl_FragColor = vec4(frag_color, 1.0); // color
 }
 """
 
@@ -164,19 +164,16 @@ checkProgramError(ph_shader)
 vao = glGenVertexArrays(1)
 ebo = glGenBuffers(1)
 pos_vbo = glGenBuffers(1)
-# pH_vbo = glGenBuffers(1)
-# elevation_vbo = glGenBuffers(1)
-# pesticide_vbo = glGenBuffers(1)
+pH_vbo = glGenBuffers(1)
+elevation_vbo = glGenBuffers(1)
+pesticide_vbo = glGenBuffers(1)
 
 glBindVertexArray(vao)
 
-# collated_positions = numpy.array([0.5, 0.5, 0.5, -0.5, -0.5, -0.5, -0.5, 0.5], numpy.float32)
 collated_positions = []
 for pos in positions:
 	collated_positions += pos
 collated_positions = numpy.array(collated_positions, numpy.float32)
-
-# indices = numpy.array([ 0, 1, 3, 1, 2, 3], numpy.uint32)
 
 glBindBuffer(OpenGL.GL.GL_ELEMENT_ARRAY_BUFFER, ebo)
 glBufferData(OpenGL.GL.GL_ELEMENT_ARRAY_BUFFER, indices, OpenGL.GL.GL_STATIC_DRAW)
@@ -186,20 +183,20 @@ glBufferData(OpenGL.GL.GL_ARRAY_BUFFER, collated_positions, OpenGL.GL.GL_STATIC_
 glVertexAttribPointer(0, 2, OpenGL.GL.GL_FLOAT, OpenGL.GL.GL_FALSE, 2*4, ctypes.c_void_p(0))
 glEnableVertexAttribArray(0)
 
-# glBindBuffer(OpenGL.GL.GL_ARRAY_BUFFER, pH_vbo)
-# glBufferData(OpenGL.GL.GL_ARRAY_BUFFER, numpy.asarray(ph), OpenGL.GL.GL_STATIC_DRAW)
-# glVertexAttribPointer(1, 1, OpenGL.GL.GL_FLOAT, OpenGL.GL.GL_FALSE, numpy.dtype(float).itemsize, 0)
-# glEnableVertexAttribArray(1)
+glBindBuffer(OpenGL.GL.GL_ARRAY_BUFFER, pH_vbo)
+glBufferData(OpenGL.GL.GL_ARRAY_BUFFER, numpy.asarray(ph), OpenGL.GL.GL_STATIC_DRAW)
+glVertexAttribPointer(1, 1, OpenGL.GL.GL_FLOAT, OpenGL.GL.GL_FALSE, 4, ctypes.c_void_p(0))
+glEnableVertexAttribArray(1)
 
-# glBindBuffer(OpenGL.GL.GL_ARRAY_BUFFER, elevation_vbo)
-# glBufferData(OpenGL.GL.GL_ARRAY_BUFFER, numpy.asarray(elevation), OpenGL.GL.GL_STATIC_DRAW)
-# glVertexAttribPointer(2, 1, OpenGL.GL.GL_FLOAT, OpenGL.GL.GL_FALSE, numpy.dtype(float).itemsize, 0)
-# glEnableVertexAttribArray(2)
+glBindBuffer(OpenGL.GL.GL_ARRAY_BUFFER, elevation_vbo)
+glBufferData(OpenGL.GL.GL_ARRAY_BUFFER, numpy.asarray(elevation), OpenGL.GL.GL_STATIC_DRAW)
+glVertexAttribPointer(2, 1, OpenGL.GL.GL_FLOAT, OpenGL.GL.GL_FALSE, 4, ctypes.c_void_p(0))
+glEnableVertexAttribArray(2)
 
-# glBindBuffer(OpenGL.GL.GL_ARRAY_BUFFER, pesticide_vbo)
-# glBufferData(OpenGL.GL.GL_ARRAY_BUFFER, numpy.asarray(pesticide), OpenGL.GL.GL_STATIC_DRAW)
-# glVertexAttribPointer(3, 1, OpenGL.GL.GL_FLOAT, OpenGL.GL.GL_FALSE, numpy.dtype(float).itemsize, 0)
-# glEnableVertexAttribArray(3)
+glBindBuffer(OpenGL.GL.GL_ARRAY_BUFFER, pesticide_vbo)
+glBufferData(OpenGL.GL.GL_ARRAY_BUFFER, numpy.asarray(pesticide), OpenGL.GL.GL_STATIC_DRAW)
+glVertexAttribPointer(3, 1, OpenGL.GL.GL_FLOAT, OpenGL.GL.GL_FALSE, 4, ctypes.c_void_p(0))
+glEnableVertexAttribArray(3)
 
 glBindBuffer(OpenGL.GL.GL_ARRAY_BUFFER, 0)
 glBindVertexArray(0)
@@ -208,8 +205,8 @@ glBindVertexArray(0)
 projMatLocPH = glGetUniformLocation(ph_shader, "projectionMatrix")
 projMat = createOrthoMat(pos_min[0] - 10, pos_max[0] + 10, pos_min[1] - 10, pos_max[1] + 10, -2, 2).flatten()
 print("Projection Matrix Location: " + str(projMatLocPH) + " Matrix: " + str(projMat))
-# lowColorLocPH = glGetUniformLocation(ph_shader, "color_low")
-# highColorLocPH = glGetUniformLocation(ph_shader, "color_high")
+lowColorLocPH = glGetUniformLocation(ph_shader, "color_low")
+highColorLocPH = glGetUniformLocation(ph_shader, "color_high")
 
 # render
 while not glfw.window_should_close(window):
@@ -217,8 +214,8 @@ while not glfw.window_should_close(window):
 	glClear(OpenGL.GL.GL_COLOR_BUFFER_BIT)
 	glUseProgram(ph_shader)
 	glUniformMatrix4fv(projMatLocPH, 1, OpenGL.GL.GL_TRUE, projMat)
-	# glUniform3f(lowColorLocPH, 1, 0, 0)
-	# glUniform3f(highColorLocPH, 0, 0, 1)
+	glUniform3f(lowColorLocPH, 0, 1, 0)
+	glUniform3f(highColorLocPH, 1, 0, 0)
 	glBindVertexArray(vao)
 	glDrawElements(OpenGL.GL.GL_TRIANGLES, len(indices), OpenGL.GL.GL_UNSIGNED_INT, None)
 	glfw.swap_buffers(window)
