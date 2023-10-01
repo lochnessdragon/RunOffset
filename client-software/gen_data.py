@@ -12,7 +12,7 @@ def ph_f(x, y):
 	return (1/6) * (math.sin(x) + (1/6) * cos(y))
 
 def elev_f(x, y):
-	return (1/70) * (x + y) + (1/100) * sin(x)
+	return (1/70) * (x + y) + (1/100) * sin(x) + (1/10) * y + (1/10) * tan(y)
 
 def pest_f(x,y):
 	return ((1)/(100)) * (x+y) + ((1)/(9)) * cos(y) + ((1)/(15)) * sin(x-((math.pi)/(2)))
