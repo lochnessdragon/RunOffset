@@ -32,6 +32,15 @@ def max_idx(arr, idx):
 			max = val[idx]
 	return max
 
+def normalize(value, min, max):
+	return (value - min) / (max - min)
+
+def isNormalized(arr):
+	for val in arr:
+		if val < 0 or val > 1:
+			return False
+	return True
+
 print("Extracting data.")
 with open("data.json") as file:
 	data = json.load(file)
@@ -44,12 +53,16 @@ ph_min = min(ph)
 ph_max = max(ph)
 pesticide_min = min(pesticide)
 pesticide_max = max(pesticide)
-elevation_min = min(pesticide)
-elevation_max = max(pesticide)
+elevation_min = min(elevation)
+elevation_max = max(elevation)
 pos_min = [min_idx(positions, 0), min_idx(positions, 1)]
 pos_max = [max_idx(positions, 0), max_idx(positions, 1)]
 
 print("Min pH:", ph_min, "Max pH:", ph_max, "Min Pesticide:", pesticide_min, "Max Pesticide:", pesticide_max, "Min Elevation:", elevation_min, "Max Elevation:", elevation_max, "Pos Min:", pos_min, "Pos Max:", pos_max)
+
+ph = [normalize(value, ph_min, ph_max) for value in ph]
+pesticide = [normalize(value, pesticide_min, pesticide_max) for value in pesticide]
+elevation = [normalize(value, elevation_min, elevation_max) for value in elevation]
 
 window_size = [round(pos_max[0] - pos_min[0]), round(pos_max[1] - pos_min[1])]
 
@@ -57,7 +70,6 @@ print("Triangulating.")
 triangulation = Delaunay(positions)
 # generate indices from delaunay info
 indices = triangulation.simplices.flatten()
-print(indices)
 
 print("Rendering images: " + str(window_size))
 # create opengl image
@@ -95,11 +107,11 @@ if not glfw.init():
 	sys.exit(1)
 # Set window hint NOT visible
 glfw.default_window_hints()
-# glfw.window_hint(glfw.VISIBLE, False)
+glfw.window_hint(glfw.VISIBLE, False)
 glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
 glfw.window_hint(glfw.CONTEXT_VERSION_MAJOR, 3)
 glfw.window_hint(glfw.CONTEXT_VERSION_MINOR, 3)
-#glfw.window_hint(glfw.TRANSPARENT_FRAMEBUFFER, 1)
+glfw.window_hint(glfw.TRANSPARENT_FRAMEBUFFER, 1)
 
 # Create a windowed mode window and its OpenGL context
 window = glfw.create_window(window_size[0], window_size[1], "hidden window", None, None)
@@ -113,26 +125,30 @@ glfw.swap_interval(1)
 glViewport(0, 0, window_size[0], window_size[1])
 
 # set clear color
-glClearColor(0.0, 0.0, 0.0, 1.0)
+glClearColor(0.0, 0.0, 0.0, 0.0)
 
 # make shaders
-vert_pH_src = """#version 330 core
+vert_src = """#version 330 core
 layout (location = 0) in vec2 pos;
 layout (location = 1) in float pH;
 layout (location = 2) in float elevation;
 layout (location = 3) in float pesticide;
 
-uniform mat4 projectionMatrix;
+uniform mat4 projection_matrix;
 uniform vec3 color_low;
+//uniform vec3 color_mid;
 uniform vec3 color_high;
 
 out vec3 frag_color;
 
 void main()
-{
-	frag_color = mix(color_low, color_high, pH);
-	gl_Position = projectionMatrix * vec4(pos.x, pos.y, 0.0, 1.0); // projMat*
-}
+{{
+	//float low_t = clamp({0} * 2, 0, 1);
+	//float high_t = clamp(({0} * 2) - 1, 0, 1);
+	//frag_color = mix(color_low, color_mid, low_t);
+	frag_color = mix(color_low, color_high, {0});
+	gl_Position = projection_matrix * vec4(pos.x, pos.y, 0.0, 1.0);
+}}
 """
 
 frag_src = """#version 330 core
@@ -144,21 +160,31 @@ void main()
 }
 """
 
-ph_vert_shader = glCreateShader(OpenGL.GL.GL_VERTEX_SHADER)
-glShaderSource(ph_vert_shader, vert_pH_src)
-glCompileShader(ph_vert_shader)
-checkShaderError(ph_vert_shader)
+def createShader(shader_type, shader_src):
+	shader = glCreateShader(shader_type)
+	glShaderSource(shader, shader_src)
+	glCompileShader(shader)
+	checkShaderError(shader)
+	return shader
 
-frag_shader = glCreateShader(OpenGL.GL.GL_FRAGMENT_SHADER)
-glShaderSource(frag_shader, frag_src)
-glCompileShader(frag_shader)
-checkShaderError(frag_shader)
+def createShaderProgram(vert_shader, frag_shader):
+	program = glCreateProgram()
+	glAttachShader(program, vert_shader)
+	glAttachShader(program, frag_shader)
+	glLinkProgram(program)
+	checkProgramError(program)
+	return program
 
-ph_shader = glCreateProgram()
-glAttachShader(ph_shader, ph_vert_shader)
-glAttachShader(ph_shader, frag_shader)
-glLinkProgram(ph_shader)
-checkProgramError(ph_shader)
+ph_src = vert_src.format("pH")
+ph_vert_shader = createShader(OpenGL.GL.GL_VERTEX_SHADER, ph_src)
+elevation_vert_shader = createShader(OpenGL.GL.GL_VERTEX_SHADER, vert_src.format("elevation"))
+pesticide_vert_shader = createShader(OpenGL.GL.GL_VERTEX_SHADER, vert_src.format("pesticide"))
+
+frag_shader = createShader(OpenGL.GL.GL_FRAGMENT_SHADER, frag_src)
+
+ph_shader = createShaderProgram(ph_vert_shader, frag_shader)
+elevation_shader = createShaderProgram(elevation_vert_shader, frag_shader)
+pesticide_shader = createShaderProgram(pesticide_vert_shader, frag_shader)
 
 # make vbo
 vao = glGenVertexArrays(1)
@@ -184,17 +210,17 @@ glVertexAttribPointer(0, 2, OpenGL.GL.GL_FLOAT, OpenGL.GL.GL_FALSE, 2*4, ctypes.
 glEnableVertexAttribArray(0)
 
 glBindBuffer(OpenGL.GL.GL_ARRAY_BUFFER, pH_vbo)
-glBufferData(OpenGL.GL.GL_ARRAY_BUFFER, numpy.asarray(ph), OpenGL.GL.GL_STATIC_DRAW)
+glBufferData(OpenGL.GL.GL_ARRAY_BUFFER, numpy.asarray(ph, numpy.float32), OpenGL.GL.GL_STATIC_DRAW)
 glVertexAttribPointer(1, 1, OpenGL.GL.GL_FLOAT, OpenGL.GL.GL_FALSE, 4, ctypes.c_void_p(0))
 glEnableVertexAttribArray(1)
 
 glBindBuffer(OpenGL.GL.GL_ARRAY_BUFFER, elevation_vbo)
-glBufferData(OpenGL.GL.GL_ARRAY_BUFFER, numpy.asarray(elevation), OpenGL.GL.GL_STATIC_DRAW)
+glBufferData(OpenGL.GL.GL_ARRAY_BUFFER, numpy.asarray(elevation, numpy.float32), OpenGL.GL.GL_STATIC_DRAW)
 glVertexAttribPointer(2, 1, OpenGL.GL.GL_FLOAT, OpenGL.GL.GL_FALSE, 4, ctypes.c_void_p(0))
 glEnableVertexAttribArray(2)
 
 glBindBuffer(OpenGL.GL.GL_ARRAY_BUFFER, pesticide_vbo)
-glBufferData(OpenGL.GL.GL_ARRAY_BUFFER, numpy.asarray(pesticide), OpenGL.GL.GL_STATIC_DRAW)
+glBufferData(OpenGL.GL.GL_ARRAY_BUFFER, numpy.asarray(pesticide, numpy.float32), OpenGL.GL.GL_STATIC_DRAW)
 glVertexAttribPointer(3, 1, OpenGL.GL.GL_FLOAT, OpenGL.GL.GL_FALSE, 4, ctypes.c_void_p(0))
 glEnableVertexAttribArray(3)
 
@@ -202,30 +228,46 @@ glBindBuffer(OpenGL.GL.GL_ARRAY_BUFFER, 0)
 glBindVertexArray(0)
 
 # uniforms
-projMatLocPH = glGetUniformLocation(ph_shader, "projectionMatrix")
-projMat = createOrthoMat(pos_min[0] - 10, pos_max[0] + 10, pos_min[1] - 10, pos_max[1] + 10, -2, 2).flatten()
-print("Projection Matrix Location: " + str(projMatLocPH) + " Matrix: " + str(projMat))
-lowColorLocPH = glGetUniformLocation(ph_shader, "color_low")
-highColorLocPH = glGetUniformLocation(ph_shader, "color_high")
+proj_mat = createOrthoMat(pos_min[0], pos_max[0], pos_min[1], pos_max[1], -2, 2).flatten()
+print("Projection Matrix: " + str(proj_mat))
+
+def writeImage(filename: str):
+	image_buffer = glReadPixels(0, 0, window_size[0], window_size[1], OpenGL.GL.GL_RGBA, OpenGL.GL.GL_UNSIGNED_BYTE)
+	image = numpy.frombuffer(image_buffer, dtype=numpy.ubyte).reshape(window_size[0], window_size[1], 4)
+	image = numpy.flip(image, 0)
+	cv2.imwrite(filename, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+
+def renderImage(vao, indices_len, shader, proj_mat):
+	# uniforms
+	proj_mat_id = glGetUniformLocation(shader, "projection_matrix")
+	low_color_id = glGetUniformLocation(shader, "color_low")
+	# mid_color_id = glGetUniformLocation(shader, "color_mid")
+	high_color_id = glGetUniformLocation(shader, "color_high")
+
+	# render
+	glClearColor(0.0, 0.0, 0.0, 0.0)
+	glClear(OpenGL.GL.GL_COLOR_BUFFER_BIT)
+	glUseProgram(shader)
+	glUniformMatrix4fv(proj_mat_id, 1, OpenGL.GL.GL_TRUE, proj_mat)
+	glUniform3f(low_color_id, 0, 1, 0)
+	# glUniform3f(mid_color_id, 1, 1, 0)
+	glUniform3f(high_color_id, 1, 0, 0)
+	glBindVertexArray(vao)
+	glDrawElements(OpenGL.GL.GL_TRIANGLES, indices_len, OpenGL.GL.GL_UNSIGNED_INT, None)
+
+def renderImageToFile(vao, indices_len, shader, proj_mat, filename: str):
+	renderImage(vao, indices_len, shader, proj_mat)
+	writeImage(filename)
 
 # render
-while not glfw.window_should_close(window):
-	glClearColor(0.0, 0.0, 0.0, 1.0)
-	glClear(OpenGL.GL.GL_COLOR_BUFFER_BIT)
-	glUseProgram(ph_shader)
-	glUniformMatrix4fv(projMatLocPH, 1, OpenGL.GL.GL_TRUE, projMat)
-	glUniform3f(lowColorLocPH, 0, 1, 0)
-	glUniform3f(highColorLocPH, 1, 0, 0)
-	glBindVertexArray(vao)
-	glDrawElements(OpenGL.GL.GL_TRIANGLES, len(indices), OpenGL.GL.GL_UNSIGNED_INT, None)
-	glfw.swap_buffers(window)
-	glfw.poll_events()
-# write map
+# while not glfw.window_should_close(window):
+# 	glfw.poll_events()
+# 	renderImage(vao, len(indices), ph_shader, proj_mat)
+# 	glfw.swap_buffers(window)
 
-# image_buffer = glReadPixels(0, 0, window_size[0], window_size[1], OpenGL.GL.GL_RGBA, OpenGL.GL.GL_UNSIGNED_BYTE)
-# image = numpy.frombuffer(image_buffer, dtype=numpy.uint8).reshape(window_size[0], window_size[1], 4)
-
-# cv2.imwrite("./ph-map.png", image)
+renderImageToFile(vao, len(indices), ph_shader, proj_mat, './ph-map.png')
+renderImageToFile(vao, len(indices), elevation_shader, proj_mat, './elevation-map.png')
+renderImageToFile(vao, len(indices), pesticide_shader, proj_mat, './pesticide-map.png')
 
 glfw.destroy_window(window)
 glfw.terminate()
